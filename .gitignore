@@ -42,3 +42,5 @@ Thumbs.db
 # Build files
 .cache/
 .parcel-cache/ 
+# Local Netlify folder
+.netlify
