@@ -53,19 +53,6 @@ export async function POST(request: NextRequest) {
       message += `🐛 **CRAWL GAME!** Onder de tafel! 🐛\n\n`
     }
 
-    // Add rating changes
-    const avgRatingChange = Math.round(Math.abs(data.total_rating_change) / (data.game_mode === 'duel' ? 2 : 4))
-    message += `📊 Rating verandering: ${team1Won ? '+' : '-'}${avgRatingChange} punten\n\n`
-
-    // Add achievements if any
-    if (data.achievements && data.achievements.length > 0) {
-      message += `🏆 **Nieuwe achievements behaald:**\n`
-      data.achievements.forEach(achievement => {
-        message += `• ${achievement.player_name} - ${achievement.achievement_name}\n`
-      })
-      message += `\n`
-    }
-
     // Add link
     message += `Klik [hier](https://niice-soccer.netlify.app/) voor meer informatie.`
 
