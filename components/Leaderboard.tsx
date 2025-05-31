@@ -7,6 +7,24 @@ import { PlayerStats } from '@/types/database'
 import { useAuth } from '@/lib/auth-context'
 import FireAnimation from './FireAnimation'
 
+interface Achievement {
+  id: string
+  name: string
+  description: string
+  icon: string
+  category: string
+  requirement_type: string
+  requirement_value: number
+}
+
+interface PlayerAchievement {
+  id: string
+  player_id: string
+  achievement_id: string
+  achieved_at: string
+  achievement: Achievement
+}
+
 interface LeaderboardProps {
   onPlayerClick?: (playerId: string) => void
 }
@@ -29,7 +47,7 @@ export default function Leaderboard({ onPlayerClick }: LeaderboardProps) {
 
       if (error) throw error
 
-      // Get last match rating change for each player
+      // Get last match rating change and active achievement for each player
       const playersWithLastChange = await Promise.all(
         (data || []).map(async (player) => {
           // Get the most recent match for this player
@@ -41,18 +59,56 @@ export default function Leaderboard({ onPlayerClick }: LeaderboardProps) {
             .limit(1)
             .single()
 
+          // Get the active achievement for this player (if any)
+          let activeAchievement = null
+          if (player.active_achievement_id) {
+            const { data: activeAchievementData } = await supabase
+              .from('player_achievements')
+              .select(`
+                *,
+                achievement:achievements(*)
+              `)
+              .eq('player_id', player.id)
+              .eq('achievement_id', player.active_achievement_id)
+              .single()
+            
+            activeAchievement = activeAchievementData
+          }
+
+          // Get the most recent monthly award for this player
+          const { data: recentMonthlyAward } = await supabase
+            .from('monthly_awards')
+            .select('*')
+            .eq('player_id', player.id)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
           let lastRatingChange = 0
           if (lastMatch && lastMatch.total_rating_change) {
-            // Use the actual stored rating change from the match
-            const isWinner = (
-              (lastMatch.team1_player1 === player.id || lastMatch.team1_player2 === player.id) 
-              ? lastMatch.team1_score > lastMatch.team2_score 
-              : lastMatch.team2_score > lastMatch.team1_score
-            )
-            // Calculate the individual rating change based on total rating change
-            // This is a simplified calculation - in reality you'd want to store individual changes
-            const avgChange = Math.abs(lastMatch.total_rating_change) / 4
-            lastRatingChange = isWinner ? Math.round(avgChange) : -Math.round(avgChange)
+            // Try to get the actual rating change for this player from match_player_ratings
+            const { data: ratingChangeData } = await supabase
+              .from('match_player_ratings')
+              .select('rating_change')
+              .eq('match_id', lastMatch.id)
+              .eq('player_id', player.id)
+              .single()
+
+            if (ratingChangeData) {
+              // Use actual rating change
+              lastRatingChange = ratingChangeData.rating_change
+            } else {
+              // Fall back to estimation if rating change data not available
+              const is1vs1 = lastMatch.game_mode === 'duel'
+              const isWinner = (
+                (lastMatch.team1_player1 === player.id || (lastMatch.team1_player2 === player.id && lastMatch.team1_player2 !== null)) 
+                ? lastMatch.team1_score > lastMatch.team2_score 
+                : lastMatch.team2_score > lastMatch.team1_score
+              )
+              const divisor = is1vs1 ? 2 : 4
+              const avgChange = Math.abs(lastMatch.total_rating_change) / divisor
+              lastRatingChange = isWinner ? Math.round(avgChange) : -Math.round(avgChange)
+            }
           }
 
           const totalMatches = player.wins + player.losses
@@ -62,7 +118,9 @@ export default function Leaderboard({ onPlayerClick }: LeaderboardProps) {
             ...player,
             win_ratio: winRate,
             total_matches: totalMatches,
-            last_rating_change: lastRatingChange
+            last_rating_change: lastRatingChange,
+            active_achievement: activeAchievement || null,
+            recent_monthly_award: recentMonthlyAward || null
           }
         })
       )
@@ -87,6 +145,21 @@ export default function Leaderboard({ onPlayerClick }: LeaderboardProps) {
     if (rank === 2) return 'bg-gray-400' 
     if (rank === 3) return 'bg-orange-500'
     return 'bg-slate-600'
+  }
+
+  const getMonthlyAwardDisplay = (awardType: string) => {
+    switch (awardType) {
+      case 'player_of_month':
+        return { icon: '🏆', name: 'Player of Month', color: 'text-yellow-400 bg-yellow-400/20 border-yellow-400/30' }
+      case 'crawler_of_month':
+        return { icon: '🐛', name: 'Crawler of Month', color: 'text-red-400 bg-red-400/20 border-red-400/30' }
+      case 'most_active':
+        return { icon: '⚡', name: 'Most Active', color: 'text-blue-400 bg-blue-400/20 border-blue-400/30' }
+      case 'game_of_month':
+        return { icon: '🎯', name: 'Game of Month', color: 'text-green-400 bg-green-400/20 border-green-400/30' }
+      default:
+        return { icon: '🏅', name: 'Award', color: 'text-gray-400 bg-gray-400/20 border-gray-400/30' }
+    }
   }
 
   if (loading) {
@@ -141,9 +214,9 @@ export default function Leaderboard({ onPlayerClick }: LeaderboardProps) {
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2 sm:gap-4">
                     {/* Rank */}
-                    <div className="flex items-center justify-center w-8">
+                    <div className="flex items-center justify-center w-6 sm:w-8">
                       {getRankIcon(index + 1)}
                     </div>
 
@@ -152,66 +225,91 @@ export default function Leaderboard({ onPlayerClick }: LeaderboardProps) {
                       <img
                         src={player.photo_url}
                         alt={player.name}
-                        className={`w-14 h-14 rounded-lg object-cover border-2 ${
+                        className={`w-10 h-10 sm:w-14 sm:h-14 rounded-lg object-cover border-2 ${
                           isCurrentUser ? 'border-blue-400/50' : 'border-white/10'
                         }`}
                       />
                     ) : (
-                      <div className={`w-14 h-14 rounded-lg ${
+                      <div className={`w-10 h-10 sm:w-14 sm:h-14 rounded-lg ${
                         isCurrentUser ? 'bg-blue-500' : 'bg-[#e51f5c]'
-                      } flex items-center justify-center text-white font-bold text-lg`}>
+                      } flex items-center justify-center text-white font-bold text-sm sm:text-lg`}>
                         {player.name.charAt(0).toUpperCase()}
                       </div>
                     )}
 
                     {/* Player Info */}
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-1">
-                        <h3 className={`font-bold text-lg ${
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-3 mb-1">
+                        <h3 className={`font-bold text-base sm:text-lg truncate ${
                           isCurrentUser ? 'text-blue-400' : 'text-white'
                         }`}>
                           {player.name}
                           {isCurrentUser && (
-                            <span className="ml-2 text-xs px-2 py-1 bg-blue-500/20 text-blue-400 rounded border border-blue-400/30">
+                            <span className="ml-2 text-xs px-1.5 py-0.5 bg-blue-500/20 text-blue-400 rounded border border-blue-400/30">
                               JIJ
                             </span>
                           )}
                         </h3>
                         
-                        {/* Win streak with fire animation (only if >= 3) */}
-                        {player.current_win_streak >= 3 && (
-                          <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-[#e51f5c]/20 border border-[#e51f5c]/30">
-                            <FireAnimation size="small" />
-                            <span className="text-xs font-bold text-[#e51f5c]">
-                              {player.current_win_streak}
-                            </span>
-                          </div>
-                        )}
+                        {/* Badges container - stack on mobile */}
+                        <div className="flex flex-wrap gap-1 sm:gap-2">
+                          {/* Active achievement tag */}
+                          {player.active_achievement && player.active_achievement.achievement && (
+                            <div className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md bg-purple-500/20 border border-purple-400/30">
+                              <span className="text-xs">{player.active_achievement.achievement.icon}</span>
+                              <span className="text-xs font-bold text-purple-400 hidden sm:inline">
+                                {player.active_achievement.achievement.name}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Most recent monthly award tag */}
+                          {player.recent_monthly_award && (
+                            (() => {
+                              const awardDisplay = getMonthlyAwardDisplay(player.recent_monthly_award.award_type)
+                              return (
+                                <div className={`flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md border ${awardDisplay.color}`}>
+                                  <span className="text-xs">{awardDisplay.icon}</span>
+                                  <span className="text-xs font-bold hidden sm:inline">
+                                    {awardDisplay.name}
+                                  </span>
+                                </div>
+                              )
+                            })()
+                          )}
+                          
+                          {/* Win streak with fire animation (only if >= 3) */}
+                          {player.current_win_streak >= 3 && (
+                            <div className="flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md bg-[#e51f5c]/20 border border-[#e51f5c]/30">
+                              <FireAnimation size="small" />
+                              <span className="text-xs font-bold text-[#e51f5c]">
+                                {player.current_win_streak}
+                              </span>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-6 text-sm text-slate-400">
+                      <div className="flex flex-wrap items-center gap-2 sm:gap-6 text-xs sm:text-sm text-slate-400">
                         <span>{player.total_matches} matches</span>
                         <span>{player.wins}W-{player.losses}L</span>
                         <span>{player.win_ratio}% WR</span>
-                        <span>Goal ratio: {player.goals_conceded > 0 ? (player.goals_scored / player.goals_conceded).toFixed(2) : player.goals_scored}</span>
-                        {player.crawls > 0 && (
-                          <span className="text-[#e51f5c]">{player.crawls} crawls</span>
-                        )}
+                        <span className="hidden sm:inline">Avg: {player.total_matches > 0 ? (player.goals_scored / player.total_matches).toFixed(1) : '0.0'} goals</span>
                       </div>
                     </div>
                   </div>
 
                   {/* Rating with last change */}
                   <div className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <div className={`text-2xl font-bold ${
+                    <div className="flex flex-col sm:flex-row items-end sm:items-center justify-end gap-1 sm:gap-2">
+                      <div className={`text-xl sm:text-2xl font-bold ${
                         isCurrentUser ? 'text-blue-400' : 'text-white'
                       }`}>
                         {player.rating}
                       </div>
                       {/* Last rating change next to rating */}
                       {player.last_rating_change !== 0 && (
-                        <div className={`px-2 py-1 rounded-md text-xs font-bold ${
+                        <div className={`px-1.5 sm:px-2 py-1 rounded-md text-xs font-bold ${
                           player.last_rating_change > 0 
                             ? 'text-green-400 bg-green-400/20 border border-green-400/30' 
                             : 'text-red-400 bg-red-400/20 border border-red-400/30'

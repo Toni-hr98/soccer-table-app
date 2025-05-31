@@ -34,30 +34,30 @@ export default function RootLayout({
   return (
     <html lang="nl">
       <head>
-        <link rel="icon" href="/favicon.ico" />
-        <link rel="apple-touch-icon" href="/icon-192.png" />
+        <link rel="icon" type="image/png" href="/favicon.png" />
+        <link rel="apple-touch-icon" href="/favicon.png" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
       <body className={inter.className}>
         <AuthProvider>
-          <div className="min-h-screen bg-[#0d1b24] text-white relative">
-            {/* Stadium Background Image */}
-            <div 
-              className="fixed inset-0 bg-cover bg-center bg-no-repeat"
-              style={{
-                backgroundImage: 'url(https://785d2dbc.delivery.rocketcdn.me/content/uploads/2022/11/shutterstock-1914172519-scaled.jpg?v=1698074134)',
-                opacity: 0.03,
-                zIndex: 1
-              }}
-            />
-            
-            <ParticlesBackground />
-            <div className="relative z-20">
-              {children}
-            </div>
-            <Navigation />
+        <div className="min-h-screen bg-[#0d1b24] text-white relative">
+          {/* Stadium Background Image */}
+          <div 
+            className="fixed inset-0 bg-cover bg-center bg-no-repeat"
+            style={{
+              backgroundImage: 'url(https://785d2dbc.delivery.rocketcdn.me/content/uploads/2022/11/shutterstock-1914172519-scaled.jpg?v=1698074134)',
+              opacity: 0.04,
+              zIndex: 1
+            }}
+          />
+          
+          <ParticlesBackground />
+          <div className="relative z-20">
+            {children}
           </div>
+          <Navigation />
+        </div>
         </AuthProvider>
       </body>
     </html>

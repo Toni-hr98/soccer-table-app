@@ -99,9 +99,10 @@ Admin functies zijn beveiligd met wachtwoord authenticatie:
 ## 📈 Rating Systeem
 
 - **Base K-factor**: 32
-- **Score Multiplier**: 0.1 (grotere score verschillen = meer rating verandering)
-- **Win Streak Bonus**: +2 punten per opeenvolgende overwinning
-- **Crawl Game**: 10-0 scores krijgen extra impact
+- **Score Multiplier**: 0.15 (grotere score verschillen = meer rating verandering)
+- **Win Streak Bonus**: 30% bonus voor 3+ streak, 60% voor 5+ streak, 90% voor 10+ streak
+- **Crawl Game**: 10-0 of 10-1 scores krijgen extra impact
+- **Duel Balance**: 1vs1 matches krijgen 0.6x scaling factor om balans te behouden met 2vs2
 
 ## 🎨 Design
 

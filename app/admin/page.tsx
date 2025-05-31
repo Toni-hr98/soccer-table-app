@@ -45,15 +45,15 @@ export default function AdminPage() {
 
           <div className="flex items-center justify-center min-h-[50vh]">
             <div className="card max-w-md w-full text-center">
-              <Shield className="mx-auto text-[#e51f5c] mb-4" size={48} />
-              <h2 className="text-xl font-bold text-white mb-2">Admin Access Required</h2>
+                <Shield className="mx-auto text-[#e51f5c] mb-4" size={48} />
+                <h2 className="text-xl font-bold text-white mb-2">Admin Access Required</h2>
               <p className="text-slate-400 mb-6">You need admin privileges to access this page.</p>
-              <button
+                    <button
                 onClick={() => router.push('/')}
                 className="btn-primary"
-              >
+                >
                 Go Back to Dashboard
-              </button>
+                </button>
             </div>
           </div>
         </div>
@@ -65,16 +65,16 @@ export default function AdminPage() {
     <div className="min-h-screen pb-16">
       <div className="max-w-4xl mx-auto py-10 px-4">
         <div className="flex items-center gap-4 mb-6">
-          <button 
-            onClick={() => router.push('/')}
-            className="btn-secondary p-2"
-          >
-            <ArrowLeft size={20} />
-          </button>
-          <div className="flex items-center gap-2">
-            <Shield className="text-[#e51f5c]" size={24} />
-            <h1 className="text-2xl font-bold text-white">Admin Panel</h1>
-          </div>
+            <button 
+              onClick={() => router.push('/')}
+              className="btn-secondary p-2"
+            >
+              <ArrowLeft size={20} />
+            </button>
+            <div className="flex items-center gap-2">
+              <Shield className="text-[#e51f5c]" size={24} />
+              <h1 className="text-2xl font-bold text-white">Admin Panel</h1>
+            </div>
         </div>
 
         <Players />

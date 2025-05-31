@@ -12,19 +12,32 @@ export interface Player {
   current_loss_streak: number
   best_win_streak: number
   crawls: number
+  crawls_caused: number
+  active_achievement_id?: string
   created_at: string
 }
 
 export interface Match {
   id: string
   team1_player1: string
-  team1_player2: string
+  team1_player2: string | null
   team2_player1: string
-  team2_player2: string
+  team2_player2: string | null
   team1_score: number
   team2_score: number
   total_rating_change: number
   is_crawl_game: boolean
+  game_mode: 'classic' | 'duel'
+  created_at: string
+}
+
+export interface MatchPlayerRating {
+  id: string
+  match_id: string
+  player_id: string
+  rating_change: number
+  previous_rating: number
+  new_rating: number
   created_at: string
 }
 
@@ -115,6 +128,9 @@ export interface PlayerStats extends Player {
   monthly_awards?: MonthlyAward[]
   total_matches: number
   last_rating_change: number
+  recent_achievement?: PlayerAchievement | null
+  active_achievement?: PlayerAchievement | null
+  recent_monthly_award?: MonthlyAward | null
 }
 
 export interface Team {

@@ -21,24 +21,27 @@ interface Player {
   current_loss_streak: number
   best_win_streak: number
   crawls: number
+  crawls_caused: number
+  active_achievement_id?: string
   created_at: string
 }
 
 interface MatchWithPlayers {
   id: string
   team1_player1: string
-  team1_player2: string
+  team1_player2: string | null
   team2_player1: string
-  team2_player2: string
+  team2_player2: string | null
   team1_score: number
   team2_score: number
   total_rating_change: number
   is_crawl_game: boolean
+  game_mode: string
   created_at: string
   team1_player1_data: Player
-  team1_player2_data: Player
+  team1_player2_data: Player | null
   team2_player1_data: Player
-  team2_player2_data: Player
+  team2_player2_data: Player | null
 }
 
 interface Achievement {
@@ -168,33 +171,78 @@ export default function UserProfile() {
         // Start from oldest match and work forward
         const matchesToUse = matchesData.slice(-10).reverse() // Take last 10 matches and reverse to go chronologically
 
-        // Start with an estimated earlier rating
-        currentRating = playerData.rating - (matchesToUse.length * 10) // Rough estimate
+        // Fetch actual rating changes for these matches
+        const matchIds = matchesToUse.map(match => match.id)
+        const { data: ratingChangesData, error: ratingError } = await supabase
+          .from('match_player_ratings')
+          .select('*')
+          .in('match_id', matchIds)
+          .eq('player_id', playerId)
+          .order('created_at', { ascending: true })
+
+        if (ratingError) {
+          console.error('Error fetching rating changes:', ratingError)
+          // Fall back to estimation if rating changes are not available
+        }
+
+        // Create a map of match_id to rating change for easy lookup
+        const ratingChangeMap = new Map()
+        if (ratingChangesData) {
+          ratingChangesData.forEach(change => {
+            ratingChangeMap.set(change.match_id, change)
+          })
+        }
+
+        // Start with estimated starting rating if we have rating changes, otherwise use current - estimated
+        if (ratingChangesData && ratingChangesData.length > 0) {
+          // Calculate starting rating by working backwards from the first match with rating data
+          const firstRatingChange = ratingChangesData[0]
+          currentRating = firstRatingChange.previous_rating
+        } else {
+          // Fallback: estimate starting rating
+          currentRating = Math.max(1200, playerData.rating - (matchesToUse.length * 10))
+        }
+        
         ratingHistory.push({ date: 'Start', rating: Math.max(1200, currentRating) })
 
         matchesToUse.forEach((match, index) => {
-          const isWinner = (
-            (match.team1_player1 === playerId || match.team1_player2 === playerId) 
-            ? match.team1_score > match.team2_score 
-            : match.team2_score > match.team1_score
-          )
+          const ratingChange = ratingChangeMap.get(match.id)
           
-          // Calculate estimated rating change for this match
-          const avgRatingChange = Math.abs(match.total_rating_change || 0) / 4
-          const ratingChange = isWinner ? Math.round(avgRatingChange) : -Math.round(avgRatingChange)
-          currentRating += ratingChange
-          currentRating = Math.max(1200, currentRating)
-          
-          ratingHistory.push({
-            date: `Game ${index + 1}`,
-            rating: Math.round(currentRating),
-            match: match,
-            won: isWinner,
-            ratingChange: Math.round(ratingChange)
-          })
+          if (ratingChange) {
+            // Use actual rating change
+            currentRating = ratingChange.new_rating
+            ratingHistory.push({
+              date: `Game ${index + 1}`,
+              rating: ratingChange.new_rating,
+              match: match,
+              won: ratingChange.rating_change > 0,
+              ratingChange: ratingChange.rating_change
+            })
+          } else {
+            // Fall back to estimation for matches without rating change data
+            const isWinner = (
+              (match.team1_player1 === playerId || match.team1_player2 === playerId) 
+              ? match.team1_score > match.team2_score 
+              : match.team2_score > match.team1_score
+            )
+            
+            const isDuelMatch = match.game_mode === 'duel'
+            const avgRatingChange = Math.abs(match.total_rating_change || 0) / (isDuelMatch ? 2 : 4)
+            const estimatedChange = isWinner ? Math.round(avgRatingChange) : -Math.round(avgRatingChange)
+            currentRating += estimatedChange
+            currentRating = Math.max(1200, currentRating)
+            
+            ratingHistory.push({
+              date: `Game ${index + 1}`,
+              rating: Math.round(currentRating),
+              match: match,
+              won: isWinner,
+              ratingChange: Math.round(estimatedChange)
+            })
+          }
         })
         
-        // Update final rating to match current
+        // Ensure final rating matches current player rating
         if (ratingHistory.length > 1) {
           ratingHistory[ratingHistory.length - 1].rating = playerData.rating
         }
@@ -274,7 +322,7 @@ export default function UserProfile() {
       const isTeam1 = match.team1_player1 === playerId || match.team1_player2 === playerId
       const won = isTeam1 ? match.team1_score > match.team2_score : match.team2_score > match.team1_score
       
-      let opponents: Player[] = []
+      let opponents: (Player | null)[] = []
       
       if (isTeam1) {
         opponents = [match.team2_player1_data, match.team2_player2_data]
@@ -318,14 +366,51 @@ export default function UserProfile() {
     return { won, isTeam1 }
   }
 
-  const handlePhotoUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        setPhotoUrl(e.target?.result as string)
+    if (!file || !user?.player_id) return
+
+    try {
+      // Create a unique filename
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${user.player_id}-${Date.now()}.${fileExt}`
+      const filePath = `avatars/${fileName}`
+
+      // Upload file to Supabase Storage
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('photos')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true
+        })
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError)
+        return
       }
-      reader.readAsDataURL(file)
+
+      // Get the public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('photos')
+        .getPublicUrl(filePath)
+
+      // Update player photo_url in database
+      const { error: updateError } = await supabase
+        .from('players')
+        .update({ photo_url: publicUrl })
+        .eq('id', user.player_id)
+
+      if (updateError) {
+        console.error('Database update error:', updateError)
+        return
+      }
+
+      // Update local state
+      setPlayer(prev => prev ? { ...prev, photo_url: publicUrl } : null)
+      setPhotoUrl(publicUrl)
+
+    } catch (error) {
+      console.error('Error uploading photo:', error)
     }
   }
 
@@ -355,13 +440,22 @@ export default function UserProfile() {
       const playerScore = isTeam1 ? match.team1_score : match.team2_score
       const opponentScore = isTeam1 ? match.team2_score : match.team1_score
 
+      // Get team compositions - handle both 1vs1 and 2vs2
       const playerTeam = isTeam1 
-        ? `${match.team1_player1_data.name} & ${match.team1_player2_data.name}`
-        : `${match.team2_player1_data.name} & ${match.team2_player2_data.name}`
+        ? match.game_mode === 'duel' || !match.team1_player2_data
+          ? match.team1_player1_data.name
+          : `${match.team1_player1_data.name} & ${match.team1_player2_data.name}`
+        : match.game_mode === 'duel' || !match.team2_player2_data
+          ? match.team2_player1_data.name
+          : `${match.team2_player1_data.name} & ${match.team2_player2_data.name}`
       
       const opponentTeam = isTeam1 
-        ? `${match.team2_player1_data.name} & ${match.team2_player2_data.name}`
-        : `${match.team1_player1_data.name} & ${match.team1_player2_data.name}`
+        ? match.game_mode === 'duel' || !match.team2_player2_data
+          ? match.team2_player1_data.name
+          : `${match.team2_player1_data.name} & ${match.team2_player2_data.name}`
+        : match.game_mode === 'duel' || !match.team1_player2_data
+          ? match.team1_player1_data.name
+          : `${match.team1_player1_data.name} & ${match.team1_player2_data.name}`
 
       return (
         <div className="bg-slate-800 border border-slate-600 rounded-lg p-3 shadow-lg max-w-xs">
@@ -415,6 +509,29 @@ export default function UserProfile() {
     if (!stats) return null
     if (stats.rank === 1) return <span className="text-yellow-400 text-xl">👑</span>
     return <span className="text-slate-400 font-bold">#{stats.rank}</span>
+  }
+
+  const handleSetActiveAchievement = async (achievementId: string) => {
+    if (!user?.player_id) return
+
+    try {
+      // Update player active_achievement_id in database
+      const { error: updateError } = await supabase
+        .from('players')
+        .update({ active_achievement_id: achievementId })
+        .eq('id', user.player_id)
+
+      if (updateError) {
+        console.error('Database update error:', updateError)
+        return
+      }
+
+      // Update local state
+      setPlayer(prev => prev ? { ...prev, active_achievement_id: achievementId } : null)
+
+    } catch (error) {
+      console.error('Error setting active achievement:', error)
+    }
   }
 
   if (!user) {
@@ -507,58 +624,115 @@ export default function UserProfile() {
       </div>
 
       {/* Stats Overview */}
-      <div className="grid gap-4 md:grid-cols-4">
-        {/* Rating Card - 2 columns wide */}
-        <div className="card text-center md:col-span-2">
-          <div className="p-2 rounded-lg bg-white/5 inline-block mb-2">
-            <Trophy className="text-[#e51f5c]" size={20} />
+      <div className="space-y-4">
+        {/* Row 1: Current Rating + Win Rate */}
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* Rating Card */}
+          <div className="card text-center">
+            <div className="p-2 rounded-lg bg-white/5 inline-block mb-2">
+              <Trophy className="text-[#e51f5c]" size={20} />
+            </div>
+            <p className="text-3xl font-bold text-white">{player.rating}</p>
+            <p className="text-slate-400 text-sm">Current Rating</p>
+            <p className="text-xs text-slate-500 mt-1">Peak: {player.highest_rating}</p>
           </div>
-          <p className="text-3xl font-bold text-white">{player.rating}</p>
-          <p className="text-slate-400 text-sm">Current Rating</p>
-          <p className="text-xs text-slate-500 mt-1">Peak: {player.highest_rating}</p>
+          
+          {/* Win Rate */}
+          <div className="card text-center">
+            <div className="p-2 rounded-lg bg-white/5 inline-block mb-2">
+              <TrendingUp className="text-white" size={20} />
+            </div>
+            <p className="text-3xl font-bold text-white">{stats.winRate.toFixed(1)}%</p>
+            <p className="text-slate-400 text-sm">Win Rate</p>
+          </div>
         </div>
-        
+
+        {/* Row 2: Total Matches + Wins + Losses */}
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="card text-center">
+            <div className="p-2 rounded-lg bg-white/5 inline-block mb-2">
+              <Calendar className="text-white" size={20} />
+            </div>
+            <p className="text-2xl font-bold text-white">{stats.totalMatches}</p>
+            <p className="text-slate-400 text-sm">Total Matches</p>
+          </div>
+          
+          <div className="card text-center">
+            <div className="p-2 rounded-lg bg-white/5 inline-block mb-2">
+              <Trophy className="text-white" size={20} />
+            </div>
+            <p className="text-2xl font-bold text-white">{player.wins}</p>
+            <p className="text-slate-400 text-sm">Wins</p>
+          </div>
+          
+          <div className="card text-center">
+            <div className="p-2 rounded-lg bg-white/5 inline-block mb-2">
+              <Target className="text-white" size={20} />
+            </div>
+            <p className="text-2xl font-bold text-white">{player.losses}</p>
+            <p className="text-slate-400 text-sm">Losses</p>
+          </div>
+        </div>
+
+        {/* Row 3: Best Win Streak (full width) */}
+        <div className="grid gap-4 md:grid-cols-1">
+          <div className="card text-center">
+            <div className="p-2 rounded-lg bg-white/5 inline-block mb-2">
+              <Zap className="text-white" size={20} />
+            </div>
+            <p className="text-2xl font-bold text-white">{player.best_win_streak}</p>
+            <p className="text-slate-400 text-sm">Best Win Streak</p>
+          </div>
+        </div>
+
+        {/* Row 4: Goals Scored + Goals Conceded + Avg Goals/Match (wider) */}
+        <div className="grid gap-4 md:grid-cols-4">
+          <div className="card text-center">
+            <div className="p-2 rounded-lg bg-white/5 inline-block mb-2">
+              <Target className="text-white" size={20} />
+            </div>
+            <p className="text-2xl font-bold text-white">{player.goals_scored}</p>
+            <p className="text-slate-400 text-sm">Goals Scored</p>
+          </div>
+          
+          <div className="card text-center">
+            <div className="p-2 rounded-lg bg-white/5 inline-block mb-2">
+              <Target className="text-white" size={20} />
+            </div>
+            <p className="text-2xl font-bold text-white">{player.goals_conceded}</p>
+            <p className="text-slate-400 text-sm">Goals Conceded</p>
+          </div>
+          
+          <div className="card text-center md:col-span-2">
+            <div className="p-2 rounded-lg bg-white/5 inline-block mb-2">
+              <Target className="text-white" size={20} />
+            </div>
+            <p className="text-2xl font-bold text-white">
+              {stats.totalMatches > 0 ? (player.goals_scored / stats.totalMatches).toFixed(1) : '0.0'}
+            </p>
+            <p className="text-slate-400 text-sm">Avg Goals/Match</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Performance Stats */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Crawled - Half width */}
         <div className="card text-center">
           <div className="p-2 rounded-lg bg-white/5 inline-block mb-2">
-            <Trophy className="text-white" size={20} />
+            <Skull className="text-white" size={20} />
           </div>
-          <p className="text-2xl font-bold text-white">{player.wins}</p>
-          <p className="text-slate-400 text-sm">Wins</p>
+          <p className="text-3xl font-bold text-white">{player.crawls}</p>
+          <p className="text-slate-400 text-sm">Times Crawled</p>
         </div>
+
+        {/* Crawls Caused - Half width */}
         <div className="card text-center">
           <div className="p-2 rounded-lg bg-white/5 inline-block mb-2">
-            <Target className="text-white" size={20} />
+            <Skull className="text-white" size={20} />
           </div>
-          <p className="text-2xl font-bold text-white">{player.losses}</p>
-          <p className="text-slate-400 text-sm">Losses</p>
-        </div>
-        
-        {/* Goal Ratio */}
-        <div className="card text-center">
-          <div className="p-2 rounded-lg bg-white/5 inline-block mb-2">
-            <Target className="text-white" size={20} />
-          </div>
-          <p className="text-2xl font-bold text-white">
-            {player.goals_conceded > 0 ? (player.goals_scored / player.goals_conceded).toFixed(2) : player.goals_scored}
-          </p>
-          <p className="text-slate-400 text-sm">Goal Ratio</p>
-        </div>
-        
-        <div className="card text-center">
-          <div className="p-2 rounded-lg bg-white/5 inline-block mb-2">
-            <Zap className="text-white" size={20} />
-          </div>
-          <p className="text-2xl font-bold text-white">{player.best_win_streak}</p>
-          <p className="text-slate-400 text-sm">Best Streak</p>
-        </div>
-        
-        {/* Win Rate - 2 columns wide */}
-        <div className="card text-center md:col-span-2">
-          <div className="p-2 rounded-lg bg-white/5 inline-block mb-2">
-            <TrendingUp className="text-white" size={20} />
-          </div>
-          <p className="text-3xl font-bold text-white">{stats.winRate.toFixed(1)}%</p>
-          <p className="text-slate-400 text-sm">Win Rate</p>
+          <p className="text-3xl font-bold text-white">{player.crawls_caused}</p>
+          <p className="text-slate-400 text-sm">Crawls Caused</p>
         </div>
       </div>
 
@@ -619,43 +793,6 @@ export default function UserProfile() {
         </div>
       </div>
 
-      {/* Performance Stats */}
-      <div className="card">
-        <h3 className="text-lg font-bold text-white mb-4">Performance Statistics</h3>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-slate-400">Total Matches</span>
-              <span className="font-bold text-white">{stats.totalMatches}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">Goals Scored</span>
-              <span className="font-bold text-white">{player.goals_scored}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">Goals Conceded</span>
-              <span className="font-bold text-white">{player.goals_conceded}</span>
-            </div>
-          </div>
-          <div className="space-y-3">
-            <div className="flex justify-between">
-              <span className="text-slate-400">Times Crawled</span>
-              <span className="font-bold text-white">{player.crawls}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">Achievements</span>
-              <span className="font-bold text-white">{stats.achievements.length}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">Account Type</span>
-              <span className={`font-bold ${user.is_admin ? 'text-yellow-400' : 'text-blue-400'}`}>
-                {user.is_admin ? 'Administrator' : 'Speler'}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Achievements */}
       {stats.achievements.length > 0 && (
         <div className="card">
@@ -663,21 +800,63 @@ export default function UserProfile() {
             <Award className="text-white" />
             Achievements ({stats.achievements.length})
           </h3>
+          
+          {/* Active Achievement Info */}
+          <div className="mb-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+            <h4 className="text-sm font-semibold text-blue-400 mb-2">🏆 Active Achievement (Zichtbaar in Leaderboard)</h4>
+            {player.active_achievement_id ? (
+              (() => {
+                const activeAchievement = stats.achievements.find(pa => pa.achievement_id === player.active_achievement_id)
+                return activeAchievement ? (
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{activeAchievement.achievement.icon}</span>
+                    <div>
+                      <p className="font-bold text-white">{activeAchievement.achievement.name}</p>
+                      <p className="text-slate-400 text-sm">{activeAchievement.achievement.description}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-slate-400 text-sm">Geen active achievement gevonden</p>
+                )
+              })()
+            ) : (
+              <p className="text-slate-400 text-sm">Geen active achievement geselecteerd. Klik op een achievement om het te activeren!</p>
+            )}
+          </div>
+
           <div className="grid gap-3 md:grid-cols-2">
-            {stats.achievements.map((playerAchievement) => (
-              <div key={playerAchievement.id} className="bg-white/5 p-3 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <span className="text-2xl">{playerAchievement.achievement.icon}</span>
-                  <div>
-                    <h4 className="font-bold text-white">{playerAchievement.achievement.name}</h4>
-                    <p className="text-slate-400 text-sm">{playerAchievement.achievement.description}</p>
-                    <p className="text-slate-500 text-xs">
-                      {formatDate(playerAchievement.achieved_at)}
-                    </p>
+            {stats.achievements.map((playerAchievement) => {
+              const isActive = player.active_achievement_id === playerAchievement.achievement_id
+              return (
+                <div 
+                  key={playerAchievement.id} 
+                  className={`p-3 rounded-lg cursor-pointer transition-all ${
+                    isActive 
+                      ? 'bg-blue-500/20 border border-blue-500/50' 
+                      : 'bg-white/5 hover:bg-white/10 border border-transparent hover:border-white/20'
+                  }`}
+                  onClick={() => handleSetActiveAchievement(playerAchievement.achievement_id)}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{playerAchievement.achievement.icon}</span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-white">{playerAchievement.achievement.name}</h4>
+                        {isActive && (
+                          <span className="text-xs px-2 py-1 bg-blue-500 text-white rounded-full">
+                            ACTIEF
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-slate-400 text-sm">{playerAchievement.achievement.description}</p>
+                      <p className="text-slate-500 text-xs">
+                        {formatDate(playerAchievement.achieved_at)}
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}
@@ -877,17 +1056,26 @@ export default function UserProfile() {
             const opponentScore = isTeam1 ? match.team2_score : match.team1_score
             
             // Calculate estimated rating change for this match
-            const avgRatingChange = Math.abs(match.total_rating_change || 0) / 4
+            const isDuelMatch = match.game_mode === 'duel'
+            const avgRatingChange = Math.abs(match.total_rating_change || 0) / (isDuelMatch ? 2 : 4)
             const ratingChange = won ? Math.round(avgRatingChange) : -Math.round(avgRatingChange)
             
-            // Get team compositions
+            // Get team compositions - handle both 1vs1 and 2vs2
             const playerTeam = isTeam1 
-              ? `${match.team1_player1_data.name} & ${match.team1_player2_data.name}`
-              : `${match.team2_player1_data.name} & ${match.team2_player2_data.name}`
+              ? isDuelMatch || !match.team1_player2_data
+                ? match.team1_player1_data.name
+                : `${match.team1_player1_data.name} & ${match.team1_player2_data.name}`
+              : isDuelMatch || !match.team2_player2_data
+                ? match.team2_player1_data.name
+                : `${match.team2_player1_data.name} & ${match.team2_player2_data.name}`
             
             const opponentTeam = isTeam1 
-              ? `${match.team2_player1_data.name} & ${match.team2_player2_data.name}`
-              : `${match.team1_player1_data.name} & ${match.team1_player2_data.name}`
+              ? isDuelMatch || !match.team2_player2_data
+                ? match.team2_player1_data.name
+                : `${match.team2_player1_data.name} & ${match.team2_player2_data.name}`
+              : isDuelMatch || !match.team1_player2_data
+                ? match.team1_player1_data.name
+                : `${match.team1_player1_data.name} & ${match.team1_player2_data.name}`
 
             return (
               <div key={match.id} className="bg-white/5 p-4 rounded-lg">
@@ -913,6 +1101,13 @@ export default function UserProfile() {
                             CRAWL
                           </span>
                         )}
+                        <span className={`text-xs px-2 py-1 rounded ${
+                          isDuelMatch 
+                            ? 'text-orange-400 bg-orange-400/20 border border-orange-400/30' 
+                            : 'text-blue-400 bg-blue-400/20 border border-blue-400/30'
+                        }`}>
+                          {isDuelMatch ? '1vs1' : '2vs2'}
+                        </span>
                       </div>
                       
                       {/* Team compositions */}

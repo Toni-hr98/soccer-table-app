@@ -1,20 +1,21 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { History, Users, Trophy, Zap, AlertTriangle, Calendar } from 'lucide-react'
+import { History, Users, Trophy, Zap, AlertTriangle, Calendar, Swords } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Match, Player } from '@/types/database'
 
 interface MatchWithPlayers extends Match {
   team1_player1_data: Player
-  team1_player2_data: Player
+  team1_player2_data: Player | null
   team2_player1_data: Player
-  team2_player2_data: Player
+  team2_player2_data: Player | null
 }
 
 export default function MatchHistory() {
   const [matches, setMatches] = useState<MatchWithPlayers[]>([])
   const [loading, setLoading] = useState(true)
+  const [gameMode, setGameMode] = useState<'all' | 'classic' | 'duel'>('all')
 
   useEffect(() => {
     fetchMatches()
@@ -41,6 +42,11 @@ export default function MatchHistory() {
       setLoading(false)
     }
   }
+
+  const filteredMatches = matches.filter(match => {
+    if (gameMode === 'all') return true
+    return match.game_mode === gameMode
+  })
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -78,36 +84,73 @@ export default function MatchHistory() {
         <img
           src={player.photo_url}
           alt={player.name}
-          className={`${sizeClasses} rounded-lg object-cover border border-white/20`}
+          className={`${sizeClasses} rounded-full object-cover border border-white/20`}
         />
       )
     }
     
     return (
-      <div className={`${sizeClasses} rounded-lg bg-[#e51f5c] flex items-center justify-center text-white font-bold`}>
+      <div className={`${sizeClasses} rounded-full bg-[#e51f5c] flex items-center justify-center text-white font-bold`}>
         {player.name.charAt(0).toUpperCase()}
       </div>
     )
   }
 
-  const renderTeam = (player1: Player, player2: Player, isWinner: boolean, size: 'sm' | 'md' = 'sm') => {
-    return (
-      <div className={`flex items-center gap-2 ${isWinner ? 'opacity-100' : 'opacity-70'}`}>
+  const renderTeam = (player1: Player, player2: Player | null, isWinner: boolean, size: 'sm' | 'md' = 'sm', ratingChange?: number, isRightSide: boolean = false) => {
+    // For 1vs1 matches, player2 will be null
+    const avatars = player2 ? (
         <div className="flex -space-x-2">
           {renderPlayerAvatar(player1, size)}
           {renderPlayerAvatar(player2, size)}
         </div>
+    ) : (
+      renderPlayerAvatar(player1, size)
+    )
+    
+    const names = player2 ? (
         <div className="flex flex-col">
-          <span className={`font-semibold ${isWinner ? 'text-white' : 'text-slate-300'} text-sm`}>
+          <span className={`font-semibold ${isWinner ? 'text-white' : 'text-slate-300'} text-xs sm:text-sm`}>
             {player1.name}
           </span>
-          <span className={`font-semibold ${isWinner ? 'text-white' : 'text-slate-300'} text-sm`}>
+          <span className={`font-semibold ${isWinner ? 'text-white' : 'text-slate-300'} text-xs sm:text-sm`}>
             {player2.name}
           </span>
         </div>
-        {isWinner && (
-          <Trophy className="text-yellow-400 ml-2" size={16} />
-        )}
+    ) : (
+      <span className={`font-semibold ${isWinner ? 'text-white' : 'text-slate-300'} text-xs sm:text-sm`}>
+        {player1.name}
+      </span>
+    )
+    
+    const ratingBadge = ratingChange ? (
+      <div className={`px-1.5 sm:px-2 py-1 rounded-md text-xs font-bold ${
+        ratingChange > 0 
+          ? 'text-green-400 bg-green-400/20 border border-green-400/30' 
+          : 'text-red-400 bg-red-400/20 border border-red-400/30'
+      }`}>
+        {ratingChange > 0 ? '+' : ''}{ratingChange}
+      </div>
+    ) : null
+    
+    const trophy = isWinner ? <Trophy className="text-yellow-400" size={14} /> : null
+    
+    if (isRightSide) {
+      return (
+        <div className={`flex items-center gap-1.5 sm:gap-2 ${isWinner ? 'opacity-100' : 'opacity-70'}`}>
+          {trophy}
+          {ratingBadge}
+          {names}
+          {avatars}
+        </div>
+      )
+    }
+    
+    return (
+      <div className={`flex items-center gap-1.5 sm:gap-2 ${isWinner ? 'opacity-100' : 'opacity-70'}`}>
+        {avatars}
+        {names}
+        {ratingBadge}
+        {trophy}
       </div>
     )
   }
@@ -134,20 +177,64 @@ export default function MatchHistory() {
     <div className="space-y-4">
       <h2 className="text-2xl font-bold text-center mb-6 flex items-center justify-center gap-2">
         <History className="text-blue-400" />
-        Wedstrijd Historie ({matches.length})
+        Wedstrijd Historie ({filteredMatches.length})
       </h2>
 
-      {matches.length === 0 ? (
+      {/* Game Mode Filter */}
+      <div className="flex justify-center mb-6">
+        <div className="flex flex-col sm:flex-row bg-white/5 rounded-lg p-1 gap-1 w-full sm:w-auto">
+          <button
+            onClick={() => setGameMode('all')}
+            className={`px-3 sm:px-4 py-2 rounded-md text-sm font-semibold transition-all ${
+              gameMode === 'all' 
+                ? 'bg-[#e51f5c] text-white' 
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            Alle ({matches.length})
+          </button>
+          <button
+            onClick={() => setGameMode('classic')}
+            className={`px-3 sm:px-4 py-2 rounded-md text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
+              gameMode === 'classic' 
+                ? 'bg-[#e51f5c] text-white' 
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Users size={16} />
+            2vs2 ({matches.filter(m => m.game_mode === 'classic').length})
+          </button>
+          <button
+            onClick={() => setGameMode('duel')}
+            className={`px-3 sm:px-4 py-2 rounded-md text-sm font-semibold transition-all flex items-center justify-center gap-2 ${
+              gameMode === 'duel' 
+                ? 'bg-[#e51f5c] text-white' 
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <Swords size={16} />
+            1vs1 ({matches.filter(m => m.game_mode === 'duel').length})
+          </button>
+        </div>
+      </div>
+
+      {filteredMatches.length === 0 ? (
         <div className="card text-center py-12">
           <History className="mx-auto text-slate-400 mb-4" size={48} />
-          <p className="text-slate-400 text-lg">Nog geen wedstrijden gespeeld</p>
+          <p className="text-slate-400 text-lg">
+            {gameMode === 'all' 
+              ? 'Nog geen wedstrijden gespeeld' 
+              : `Nog geen ${gameMode === 'classic' ? '2vs2' : '1vs1'} wedstrijden gespeeld`
+            }
+          </p>
           <p className="text-slate-500 text-sm mt-2">Ga naar Nieuwe Wedstrijd om je eerste match toe te voegen</p>
         </div>
       ) : (
         <div className="space-y-4">
-          {matches.map((match) => {
+          {filteredMatches.map((match) => {
             const winnerTeam = getWinnerTeam(match)
             const intensity = getMatchIntensity(match)
+            const is1vs1 = match.game_mode === 'duel'
             
             return (
               <div
@@ -157,58 +244,60 @@ export default function MatchHistory() {
                 {/* Background intensity indicator */}
                 <div className={`absolute inset-0 ${intensity.bg} opacity-5 group-hover:opacity-10 transition-opacity`}></div>
                 
-                {/* Crawl game indicator */}
-                {match.is_crawl_game && (
-                  <div className="absolute top-2 right-2 bg-red-500/20 border border-red-500/30 rounded-full p-2">
-                    <AlertTriangle className="text-red-400" size={16} />
-                  </div>
-                )}
-                
                 <div className="relative z-10">
                   {/* Match Header */}
-                  <div className="flex items-center justify-between mb-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
                     <div className="flex items-center gap-2 text-sm text-slate-400">
                       <Calendar size={14} />
-                      {formatDate(match.created_at)}
+                      <span className="hidden sm:inline">{formatDate(match.created_at)}</span>
+                      <span className="sm:hidden">{formatDate(match.created_at).replace(/\d{4},\s/, '')}</span>
+                      <div className="flex items-center gap-1 ml-2">
+                        {is1vs1 ? <Swords size={14} /> : <Users size={14} />}
+                        <span className="text-xs font-semibold">
+                          {is1vs1 ? 'DUEL' : 'CLASSIC'}
+                        </span>
+                      </div>
                     </div>
                     
                     <div className="flex items-center gap-2">
                       <span className={`text-xs px-2 py-1 rounded-full ${intensity.bg} ${intensity.color} font-semibold`}>
                         {intensity.label}
                       </span>
-                      {match.total_rating_change > 0 && (
-                        <div className="flex items-center gap-1 bg-purple-500/20 rounded-full px-2 py-1">
-                          <Zap size={12} className="text-purple-400" />
-                          <span className="text-xs font-bold text-purple-400">
-                            {match.total_rating_change}
-                          </span>
+                      {match.is_crawl_game && (
+                        <div className="flex items-center gap-1 bg-red-500/20 border border-red-500/30 rounded-full px-2 py-1">
+                          <AlertTriangle className="text-red-400" size={12} />
+                          <span className="text-xs text-red-400 font-semibold hidden sm:inline">Crawl</span>
                         </div>
                       )}
                     </div>
                   </div>
 
                   {/* Teams and Score */}
-                  <div className="grid grid-cols-3 gap-4 items-center">
-                    {/* Team 1 */}
-                    <div className="flex justify-start">
+                  <div className="flex flex-col md:grid md:grid-cols-3 gap-4 md:items-center">
+                    {/* Team 1 / Player 1 */}
+                    <div className="flex justify-start md:justify-start">
                       {renderTeam(
                         match.team1_player1_data,
                         match.team1_player2_data,
                         winnerTeam === 'team1',
-                        'md'
+                        'md',
+                        winnerTeam === 'team1' 
+                          ? Math.round(Math.abs(match.total_rating_change || 0) / (is1vs1 ? 2 : 4))
+                          : -Math.round(Math.abs(match.total_rating_change || 0) / (is1vs1 ? 2 : 4)),
+                        false
                       )}
                     </div>
 
                     {/* Score */}
-                    <div className="text-center">
-                      <div className="flex items-center justify-center gap-4">
-                        <span className={`text-3xl font-bold ${
+                    <div className="text-center order-first md:order-none">
+                      <div className="flex items-center justify-center gap-2 md:gap-4">
+                        <span className={`text-2xl md:text-3xl font-bold ${
                           winnerTeam === 'team1' ? 'text-green-400' : 'text-slate-400'
                         }`}>
                           {match.team1_score}
                         </span>
-                        <span className="text-slate-500 text-xl">-</span>
-                        <span className={`text-3xl font-bold ${
+                        <span className="text-slate-500 text-lg md:text-xl">-</span>
+                        <span className={`text-2xl md:text-3xl font-bold ${
                           winnerTeam === 'team2' ? 'text-green-400' : 'text-slate-400'
                         }`}>
                           {match.team2_score}
@@ -216,39 +305,25 @@ export default function MatchHistory() {
                       </div>
                       
                       {match.is_crawl_game && (
-                        <div className="mt-2 text-xs text-red-400 font-semibold flex items-center justify-center gap-1">
+                        <div className="mt-1 md:mt-2 text-xs text-red-400 font-semibold flex items-center justify-center gap-1">
                           <span>🐛</span>
                           Crawl Game!
                         </div>
                       )}
                     </div>
 
-                    {/* Team 2 */}
-                    <div className="flex justify-end">
+                    {/* Team 2 / Player 2 */}
+                    <div className="flex justify-start md:justify-end">
                       {renderTeam(
                         match.team2_player1_data,
                         match.team2_player2_data,
                         winnerTeam === 'team2',
-                        'md'
+                        'md',
+                        winnerTeam === 'team2' 
+                          ? Math.round(Math.abs(match.total_rating_change || 0) / (is1vs1 ? 2 : 4))
+                          : -Math.round(Math.abs(match.total_rating_change || 0) / (is1vs1 ? 2 : 4)),
+                        false
                       )}
-                    </div>
-                  </div>
-
-                  {/* Match Stats */}
-                  <div className="mt-4 pt-4 border-t border-white/10">
-                    <div className="grid grid-cols-3 gap-4 text-center text-sm">
-                      <div>
-                        <p className="text-slate-400">Score verschil</p>
-                        <p className="font-bold text-white">{getScoreDifference(match)}</p>
-                      </div>
-                      <div>
-                        <p className="text-slate-400">Rating impact</p>
-                        <p className="font-bold text-purple-400">{match.total_rating_change}</p>
-                      </div>
-                      <div>
-                        <p className="text-slate-400">Match type</p>
-                        <p className={`font-bold ${intensity.color}`}>{intensity.label}</p>
-                      </div>
                     </div>
                   </div>
                 </div>

@@ -8,6 +8,10 @@
 [build.environment]
   NODE_VERSION = "18"
 
+[functions]
+  # Increase timeout for API functions
+  timeout = 30
+
 # Redirect all requests to index.html for client-side routing
 [[redirects]]
   from = "/*"

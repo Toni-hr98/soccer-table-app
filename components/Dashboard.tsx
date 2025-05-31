@@ -225,8 +225,8 @@ export default function Dashboard() {
           <div className="space-y-3 text-sm text-slate-300">
             <p>• <strong>Rating:</strong> Nieuwe spelers starten op 1200, verandert op basis van wins/losses en tegenstander sterkte</p>
             <p>• <strong>Rating Berekening:</strong> Gebruikt Elo-systeem met K-factor 32, score verschil en win streak bonussen</p>
-            <p>• <strong>Wedstrijden:</strong> Alle matches gaan tot 10 doelpunten, scores mogen niet gelijk zijn</p>
-            <p>• <strong>Win Streaks:</strong> Geven bonussen: 3+ (20%), 5+ (40%), 10+ (60%)</p>
+            <p>• <strong>Wedstrijden:</strong> Alle matches gaan tot 10 doelpunten</p>
+            <p>• <strong>Win Streaks:</strong> Geven bonussen: 3+ (30%), 5+ (60%), 10+ (90%)</p>
             <p>• <strong>Crawl Games:</strong> 10-0 of 10-1 wedstrijden waarbij verliezers onder de tafel moeten kruipen</p>
             <p>• <strong>Monthly Awards:</strong> Toegekend op basis van maandelijkse statistieken (rating groei, meeste matches, crawls)</p>
             <p>• <strong>Hall of Fame:</strong> All-time records van alle spelers</p>
