@@ -2,6 +2,7 @@ export interface Player {
   id: string
   name: string
   photo_url?: string
+  king_photo?: string
   rating: number
   highest_rating: number
   goals_scored: number

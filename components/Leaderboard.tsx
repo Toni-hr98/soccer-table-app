@@ -221,9 +221,9 @@ export default function Leaderboard({ onPlayerClick }: LeaderboardProps) {
                     </div>
 
                     {/* Player Photo */}
-                    {player.photo_url ? (
+                    {player.photo_url || (index === 0 && player.king_photo) ? (
                       <img
-                        src={player.photo_url}
+                        src={index === 0 && player.king_photo ? player.king_photo : player.photo_url}
                         alt={player.name}
                         className={`w-10 h-10 sm:w-14 sm:h-14 rounded-lg object-cover border-2 ${
                           isCurrentUser ? 'border-blue-400/50' : 'border-white/10'

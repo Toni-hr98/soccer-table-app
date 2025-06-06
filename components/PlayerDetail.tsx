@@ -346,7 +346,7 @@ export default function PlayerDetail({ playerId, onBack }: PlayerDetailProps) {
   }
 
   const getWinLossData = () => {
-    if (!player) return []
+    if (!stats || !player) return []
     return [
       { name: 'Wins', value: player.wins },
       { name: 'Losses', value: player.losses }
@@ -472,9 +472,9 @@ export default function PlayerDetail({ playerId, onBack }: PlayerDetailProps) {
         </button>
         <div className="flex items-center gap-6 flex-1">
           {/* Player Avatar */}
-          {player.photo_url ? (
+          {player.photo_url || (stats?.rank === 1 && player.king_photo) ? (
             <img
-              src={player.photo_url}
+              src={stats?.rank === 1 && player.king_photo ? player.king_photo : player.photo_url}
               alt={player.name}
               className="w-20 h-20 rounded-full object-cover"
             />
@@ -488,7 +488,7 @@ export default function PlayerDetail({ playerId, onBack }: PlayerDetailProps) {
           <div className="flex-1">
             <h1 className="text-4xl font-bold text-white mb-2">{player.name}</h1>
             <div className="flex items-center gap-4 text-slate-400">
-              <span>Rank: <span className="text-white font-bold">#{stats.rank}</span></span>
+              <span>Rank: <span className="text-white font-bold">#{stats?.rank}</span></span>
               {player.current_win_streak >= 3 && (
                 <div className="flex items-center gap-1">
                   <FireAnimation size="small" />
