@@ -101,6 +101,7 @@ export default function UserProfile() {
   const [stats, setStats] = useState<UserStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
+  const [matchRatingChanges, setMatchRatingChanges] = useState<Map<string, number>>(new Map())
 
   useEffect(() => {
     if (user?.player_id) {
@@ -184,13 +185,19 @@ export default function UserProfile() {
           // Fall back to estimation if rating changes are not available
         }
 
-        // Create a map of match_id to rating change for easy lookup
-        const ratingChangeMap = new Map()
+        // Create maps voor snelle lookup
+        const ratingChangeObjMap = new Map<string, any>()
+        const ratingChangeValueMap = new Map<string, number>()
+
         if (ratingChangesData) {
           ratingChangesData.forEach(change => {
-            ratingChangeMap.set(change.match_id, change)
+            ratingChangeObjMap.set(change.match_id, change)
+            ratingChangeValueMap.set(change.match_id, change.rating_change)
           })
         }
+
+        // Sla de numerieke map op voor gebruik in Recent Matches kaarten
+        setMatchRatingChanges(ratingChangeValueMap)
 
         // Start with estimated starting rating if we have rating changes, otherwise use current - estimated
         if (ratingChangesData && ratingChangesData.length > 0) {
@@ -205,17 +212,17 @@ export default function UserProfile() {
         ratingHistory.push({ date: 'Start', rating: Math.max(1200, currentRating) })
 
         matchesToUse.forEach((match, index) => {
-          const ratingChange = ratingChangeMap.get(match.id)
+          const ratingChangeObj = ratingChangeObjMap.get(match.id)
           
-          if (ratingChange) {
-            // Use actual rating change
-            currentRating = ratingChange.new_rating
+          if (ratingChangeObj) {
+            // Gebruik echte rating verandering indien beschikbaar
+            currentRating = ratingChangeObj.new_rating
             ratingHistory.push({
               date: `Game ${index + 1}`,
-              rating: ratingChange.new_rating,
+              rating: ratingChangeObj.new_rating,
               match: match,
-              won: ratingChange.rating_change > 0,
-              ratingChange: ratingChange.rating_change
+              won: ratingChangeObj.rating_change > 0,
+              ratingChange: ratingChangeObj.rating_change
             })
           } else {
             // Fall back to estimation for matches without rating change data
@@ -435,7 +442,7 @@ export default function UserProfile() {
       }
 
       const match = data.match
-      const isTeam1 = match.team1_player1 === user?.player_id || match.team1_player2 === user?.player_id
+      const { won, isTeam1 } = getMatchResult(match)
       const playerScore = isTeam1 ? match.team1_score : match.team2_score
       const opponentScore = isTeam1 ? match.team2_score : match.team1_score
 
@@ -456,22 +463,31 @@ export default function UserProfile() {
           ? match.team1_player1_data.name
           : `${match.team1_player1_data.name} & ${match.team1_player2_data.name}`
 
+      // Determine rating change for this match (actual from DB if available, otherwise estimate)
+      const isDuelMatch = match.game_mode === 'duel'
+
+      let ratingChange = matchRatingChanges.get(match.id)
+      if (ratingChange === undefined) {
+        const avgRatingChange = Math.abs(match.total_rating_change || 0) / (isDuelMatch ? 2 : 4)
+        ratingChange = won ? Math.round(avgRatingChange) : -Math.round(avgRatingChange)
+      }
+
       return (
         <div className="bg-slate-800 border border-slate-600 rounded-lg p-3 shadow-lg max-w-xs">
           <p className="text-white font-semibold mb-2">{label}</p>
           
           <div className="space-y-1 text-sm">
             <div className="flex items-center gap-2">
-              <div className={`w-2 h-2 rounded-full ${data.won ? 'bg-green-400' : 'bg-red-400'}`}></div>
+              <div className={`w-2 h-2 rounded-full ${won ? 'bg-green-400' : 'bg-red-400'}`}></div>
               <span className="text-white font-medium">
                 {playerScore} - {opponentScore}
               </span>
               <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${
-                data.won 
+                won 
                   ? 'text-green-400 bg-green-400/20' 
                   : 'text-red-400 bg-red-400/20'
               }`}>
-                {data.ratingChange && data.ratingChange > 0 ? '+' : ''}{data.ratingChange}
+                {ratingChange > 0 ? '+' : ''}{ratingChange}
               </span>
             </div>
             
@@ -1055,10 +1071,14 @@ export default function UserProfile() {
             const playerScore = isTeam1 ? match.team1_score : match.team2_score
             const opponentScore = isTeam1 ? match.team2_score : match.team1_score
             
-            // Calculate estimated rating change for this match
+            // Determine rating change for this match (actual from DB if available, otherwise estimate)
             const isDuelMatch = match.game_mode === 'duel'
-            const avgRatingChange = Math.abs(match.total_rating_change || 0) / (isDuelMatch ? 2 : 4)
-            const ratingChange = won ? Math.round(avgRatingChange) : -Math.round(avgRatingChange)
+
+            let ratingChange = matchRatingChanges.get(match.id)
+            if (ratingChange === undefined) {
+              const avgRatingChange = Math.abs(match.total_rating_change || 0) / (isDuelMatch ? 2 : 4)
+              ratingChange = won ? Math.round(avgRatingChange) : -Math.round(avgRatingChange)
+            }
             
             // Get team compositions - handle both 1vs1 and 2vs2
             const playerTeam = isTeam1 

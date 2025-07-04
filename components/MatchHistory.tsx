@@ -17,6 +17,11 @@ export default function MatchHistory() {
   const [loading, setLoading] = useState(true)
   const [gameMode, setGameMode] = useState<'all' | 'classic' | 'duel'>('all')
 
+  // Map<matchId, { team1: number; team2: number }>
+  const [matchTeamRatingChanges, setMatchTeamRatingChanges] = useState<
+    Map<string, { team1: number; team2: number }>
+  >(new Map())
+
   useEffect(() => {
     fetchMatches()
   }, [])
@@ -35,7 +40,62 @@ export default function MatchHistory() {
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setMatches(data || [])
+      const matchesData = data || []
+      setMatches(matchesData)
+
+      // ------------------
+      // Fetch rating changes for these matches so we can display exacte waarden
+      // ------------------
+      if (matchesData.length > 0) {
+        const matchIds = matchesData.map(m => m.id)
+        const { data: ratingRows, error: ratingErr } = await supabase
+          .from('match_player_ratings')
+          .select('match_id, player_id, rating_change')
+          .in('match_id', matchIds)
+
+        if (ratingErr) {
+          console.warn('Kon rating changes niet laden, gebruik fallback', ratingErr)
+        } else if (ratingRows) {
+          const map: Map<string, any> = new Map()
+
+          // Helper om snel spelers per team op te zoeken
+          const matchMap = new Map(matchesData.map(m => [m.id, m]))
+
+          ratingRows.forEach(row => {
+            const match = matchMap.get(row.match_id)
+            if (!match) return
+
+            // Bepaal of speler team1 of team2 is
+            const team1Ids = [match.team1_player1, match.team1_player2].filter(Boolean)
+            const teamKey = team1Ids.includes(row.player_id) ? 'team1' : 'team2'
+
+            const existing: any = map.get(row.match_id) || { team1: 0, team2: 0, cnt1: 0, cnt2: 0 }
+
+            if (teamKey === 'team1') {
+              existing.team1 += row.rating_change
+              existing.cnt1 = (existing.cnt1 || 0) + 1
+            } else {
+              existing.team2 += row.rating_change
+              existing.cnt2 = (existing.cnt2 || 0) + 1
+            }
+
+            map.set(row.match_id, existing)
+          })
+
+          // Gemiddelde per speler (zeker nuttig voor 2vs2)
+          const finalMap = new Map<string, { team1: number; team2: number }>()
+          map.forEach((val: any, key) => {
+            const team1Avg = val.cnt1 ? Math.round(val.team1 / val.cnt1) : undefined
+            const team2Avg = val.cnt2 ? Math.round(val.team2 / val.cnt2) : undefined
+            finalMap.set(key, {
+              team1: team1Avg ?? 0,
+              team2: team2Avg ?? 0
+            })
+          })
+
+          setMatchTeamRatingChanges(finalMap)
+        }
+      }
     } catch (error) {
       console.error('Error fetching matches:', error)
     } finally {
@@ -276,16 +336,24 @@ export default function MatchHistory() {
                   <div className="flex flex-col md:grid md:grid-cols-3 gap-4 md:items-center">
                     {/* Team 1 / Player 1 */}
                     <div className="flex justify-start md:justify-start">
-                      {renderTeam(
-                        match.team1_player1_data,
-                        match.team1_player2_data,
-                        winnerTeam === 'team1',
-                        'md',
-                        winnerTeam === 'team1' 
-                          ? Math.round(Math.abs(match.total_rating_change || 0) / (is1vs1 ? 2 : 4))
-                          : -Math.round(Math.abs(match.total_rating_change || 0) / (is1vs1 ? 2 : 4)),
-                        false
-                      )}
+                      {(() => {
+                        const changeData = matchTeamRatingChanges.get(match.id)
+                        let team1Change: number | undefined
+                        if (changeData) {
+                          team1Change = changeData.team1
+                        } else {
+                          const base = Math.round(Math.abs(match.total_rating_change || 0) / (is1vs1 ? 2 : 4))
+                          team1Change = winnerTeam === 'team1' ? base : -base
+                        }
+                        return renderTeam(
+                          match.team1_player1_data,
+                          match.team1_player2_data,
+                          winnerTeam === 'team1',
+                          'md',
+                          team1Change,
+                          false
+                        )
+                      })()}
                     </div>
 
                     {/* Score */}
@@ -314,16 +382,24 @@ export default function MatchHistory() {
 
                     {/* Team 2 / Player 2 */}
                     <div className="flex justify-start md:justify-end">
-                      {renderTeam(
-                        match.team2_player1_data,
-                        match.team2_player2_data,
-                        winnerTeam === 'team2',
-                        'md',
-                        winnerTeam === 'team2' 
-                          ? Math.round(Math.abs(match.total_rating_change || 0) / (is1vs1 ? 2 : 4))
-                          : -Math.round(Math.abs(match.total_rating_change || 0) / (is1vs1 ? 2 : 4)),
-                        false
-                      )}
+                      {(() => {
+                        const changeData = matchTeamRatingChanges.get(match.id)
+                        let team2Change: number | undefined
+                        if (changeData) {
+                          team2Change = changeData.team2
+                        } else {
+                          const base = Math.round(Math.abs(match.total_rating_change || 0) / (is1vs1 ? 2 : 4))
+                          team2Change = winnerTeam === 'team2' ? base : -base
+                        }
+                        return renderTeam(
+                          match.team2_player1_data,
+                          match.team2_player2_data,
+                          winnerTeam === 'team2',
+                          'md',
+                          team2Change,
+                          false
+                        )
+                      })()}
                     </div>
                   </div>
                 </div>

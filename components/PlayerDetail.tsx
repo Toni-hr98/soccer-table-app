@@ -56,6 +56,7 @@ export default function PlayerDetail({ playerId, onBack }: PlayerDetailProps) {
   const [player, setPlayer] = useState<Player | null>(null)
   const [stats, setStats] = useState<PlayerStats | null>(null)
   const [loading, setLoading] = useState(true)
+  const [matchRatingChanges, setMatchRatingChanges] = useState<Map<string, number>>(new Map())
 
   useEffect(() => {
     fetchPlayerData()
@@ -150,13 +151,19 @@ export default function PlayerDetail({ playerId, onBack }: PlayerDetailProps) {
           // Fall back to estimation if rating changes are not available
         }
 
-        // Create a map of match_id to rating change for easy lookup
-        const ratingChangeMap = new Map()
+        // Create maps voor snelle lookup
+        const ratingChangeObjMap = new Map<string, any>()
+        const ratingChangeValueMap = new Map<string, number>()
+
         if (ratingChangesData) {
           ratingChangesData.forEach(change => {
-            ratingChangeMap.set(change.match_id, change)
+            ratingChangeObjMap.set(change.match_id, change)
+            ratingChangeValueMap.set(change.match_id, change.rating_change)
           })
         }
+
+        // Opslaan voor gebruik in Recent Matches kaarten
+        setMatchRatingChanges(ratingChangeValueMap)
 
         // Start with estimated starting rating if we have rating changes, otherwise use current - estimated
         let currentRating = playerData.rating
@@ -177,17 +184,16 @@ export default function PlayerDetail({ playerId, onBack }: PlayerDetailProps) {
         
         // Build the history forward using actual rating changes when available
         matchesToUse.forEach((match, index) => {
-          const ratingChange = ratingChangeMap.get(match.id)
+          const ratingChangeObj = ratingChangeObjMap.get(match.id)
           
-          if (ratingChange) {
-            // Use actual rating change
-            currentRating = ratingChange.new_rating
+          if (ratingChangeObj) {
+            currentRating = ratingChangeObj.new_rating
             ratingHistory.push({
               date: `Game ${index + 1}`,
-              rating: ratingChange.new_rating,
+              rating: ratingChangeObj.new_rating,
               match: match,
-              won: ratingChange.rating_change > 0,
-              ratingChange: ratingChange.rating_change
+              won: ratingChangeObj.rating_change > 0,
+              ratingChange: ratingChangeObj.rating_change
             })
           } else {
             // Fall back to estimation for matches without rating change data
@@ -196,7 +202,7 @@ export default function PlayerDetail({ playerId, onBack }: PlayerDetailProps) {
               ? match.team1_score > match.team2_score 
               : match.team2_score > match.team1_score
             )
-            
+
             const isDuelMatch = match.game_mode === 'duel'
             const avgRatingChange = Math.abs(match.total_rating_change || 0) / (isDuelMatch ? 2 : 4)
             const estimatedChange = isWinner ? Math.round(avgRatingChange) : -Math.round(avgRatingChange)
@@ -890,10 +896,14 @@ export default function PlayerDetail({ playerId, onBack }: PlayerDetailProps) {
             const playerScore = isTeam1 ? match.team1_score : match.team2_score
             const opponentScore = isTeam1 ? match.team2_score : match.team1_score
             
-            // Calculate estimated rating change for this match
+            // Determine rating change for this match (actual from DB if available, otherwise estimate)
             const isDuelMatch = match.game_mode === 'duel'
-            const avgRatingChange = Math.abs(match.total_rating_change || 0) / (isDuelMatch ? 2 : 4)
-            const ratingChange = won ? Math.round(avgRatingChange) : -Math.round(avgRatingChange)
+
+            let ratingChange = matchRatingChanges.get(match.id)
+            if (ratingChange === undefined) {
+              const avgRatingChange = Math.abs(match.total_rating_change || 0) / (isDuelMatch ? 2 : 4)
+              ratingChange = won ? Math.round(avgRatingChange) : -Math.round(avgRatingChange)
+            }
             
             // Get team compositions - handle both 1vs1 and 2vs2
             const playerTeam = isTeam1 
