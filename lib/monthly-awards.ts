@@ -221,17 +221,16 @@ function calculateMostActive(playerStats: MonthlyStats[]) {
 
 function calculateCrawlerOfMonth(playerStats: MonthlyStats[]) {
   const playersWithCrawls = playerStats.filter(p => p.crawls_received > 0)
-  if (playersWithCrawls.length === 0) return null
-  
-  const winner = playersWithCrawls.reduce((prev, current) => 
-    current.crawls_received > prev.crawls_received ? current : prev
-  )
-  
-  return {
+  if (playersWithCrawls.length === 0) return []
+
+  const maxCrawls = Math.max(...playersWithCrawls.map(p => p.crawls_received))
+  const winners = playersWithCrawls.filter(p => p.crawls_received === maxCrawls)
+
+  return winners.map(winner => ({
     player_id: winner.player_id,
     value: winner.crawls_received,
     description: `${winner.crawls_received} keer onder de tafel gekropen`
-  }
+  }))
 }
 
 function calculateGameOfMonth(matches: any[]) {
@@ -284,14 +283,16 @@ async function insertMonthlyAwards(year: number, month: number, awards: any) {
     })
   }
 
-  if (awards.crawler_of_month) {
-    awardsToInsert.push({
-      year,
-      month,
-      award_type: 'crawler_of_month',
-      player_id: awards.crawler_of_month.player_id,
-      value: awards.crawler_of_month.value,
-      description: awards.crawler_of_month.description
+  if (Array.isArray(awards.crawler_of_month)) {
+    awards.crawler_of_month.forEach((crawler: any) => {
+      awardsToInsert.push({
+        year,
+        month,
+        award_type: 'crawler_of_month',
+        player_id: crawler.player_id,
+        value: crawler.value,
+        description: crawler.description
+      })
     })
   }
 

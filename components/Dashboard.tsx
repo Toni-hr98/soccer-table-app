@@ -381,6 +381,13 @@ export default function Dashboard() {
                   <h4 className="text-xl font-bold text-white mb-3">
                     {monthlyAwards.player_of_month.player.name}
                   </h4>
+
+                  {/* Value */}
+                  {monthlyAwards.player_of_month.value && (
+                    <div className="text-2xl font-bold text-green-400 mb-2">
+                      +{monthlyAwards.player_of_month.value}
+                    </div>
+                  )}
                   
                   {/* Description */}
                   {monthlyAwards.player_of_month.description && (
@@ -425,12 +432,14 @@ export default function Dashboard() {
               )}
             </div>
 
-            {/* Crawler of the Month */}
+            {/* Crawler of the Month (dynamic label) */}
             <div className="card text-center">
-              <h3 className="text-lg font-bold text-white mb-4">Crawler of the Month</h3>
+              <h3 className="text-lg font-bold text-white mb-4">
+                {monthlyAwards.crawler_of_month.length > 1 ? 'Crawlers of the Month' : 'Crawler of the Month'}
+              </h3>
 
               {(monthlyAwards.crawler_of_month && monthlyAwards.crawler_of_month.length > 0) ? (
-                <div className="flex flex-col items-center gap-6">
+                <div className="mb-3 flex justify-center gap-4 flex-wrap">
                   {monthlyAwards.crawler_of_month.map((award) => (
                     <div key={award.player.id} className="flex flex-col items-center">
                       <div className="mb-2">

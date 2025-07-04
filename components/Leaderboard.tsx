@@ -47,6 +47,15 @@ export default function Leaderboard({ onPlayerClick }: LeaderboardProps) {
 
       if (error) throw error
 
+      // Determine previous month/year for monthly awards
+      const now = new Date()
+      let year = now.getFullYear()
+      let month = now.getMonth() // 0-11
+      if (month === 0) {
+        month = 12
+        year -= 1
+      }
+
       // Get last match rating change and active achievement for each player
       const playersWithLastChange = await Promise.all(
         (data || []).map(async (player) => {
@@ -75,14 +84,13 @@ export default function Leaderboard({ onPlayerClick }: LeaderboardProps) {
             activeAchievement = activeAchievementData
           }
 
-          // Get the most recent monthly award for this player
-          const { data: recentMonthlyAward } = await supabase
+          // Get all monthly awards for this player for the previous month
+          const { data: monthlyAwardsForPlayer } = await supabase
             .from('monthly_awards')
             .select('*')
             .eq('player_id', player.id)
-            .order('created_at', { ascending: false })
-            .limit(1)
-            .maybeSingle()
+            .eq('year', year)
+            .eq('month', month)
 
           let lastRatingChange = 0
           if (lastMatch && lastMatch.total_rating_change) {
@@ -120,7 +128,7 @@ export default function Leaderboard({ onPlayerClick }: LeaderboardProps) {
             total_matches: totalMatches,
             last_rating_change: lastRatingChange,
             active_achievement: activeAchievement || null,
-            recent_monthly_award: recentMonthlyAward || null
+            monthly_awards: monthlyAwardsForPlayer || []
           }
         })
       )
@@ -263,20 +271,18 @@ export default function Leaderboard({ onPlayerClick }: LeaderboardProps) {
                             </div>
                           )}
 
-                          {/* Most recent monthly award tag */}
-                          {player.recent_monthly_award && (
-                            (() => {
-                              const awardDisplay = getMonthlyAwardDisplay(player.recent_monthly_award.award_type)
-                              return (
-                                <div className={`flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md border ${awardDisplay.color}`}>
-                                  <span className="text-xs">{awardDisplay.icon}</span>
-                                  <span className="text-xs font-bold hidden sm:inline">
-                                    {awardDisplay.name}
-                                  </span>
-                                </div>
-                              )
-                            })()
-                          )}
+                          {/* Monthly awards badges (can be multiple) */}
+                          {player.monthly_awards && player.monthly_awards.map((award: any) => {
+                            const awardDisplay = getMonthlyAwardDisplay(award.award_type)
+                            return (
+                              <div key={award.id} className={`flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-md border ${awardDisplay.color}`}>
+                                <span className="text-xs">{awardDisplay.icon}</span>
+                                <span className="text-xs font-bold hidden sm:inline">
+                                  {awardDisplay.name}
+                                </span>
+                              </div>
+                            )
+                          })}
                           
                           {/* Win streak with fire animation (only if >= 3) */}
                           {player.current_win_streak >= 3 && (

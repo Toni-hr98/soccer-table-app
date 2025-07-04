@@ -346,12 +346,12 @@ export default function MatchHistory() {
                           team1Change = winnerTeam === 'team1' ? base : -base
                         }
                         return renderTeam(
-                          match.team1_player1_data,
-                          match.team1_player2_data,
-                          winnerTeam === 'team1',
-                          'md',
+                        match.team1_player1_data,
+                        match.team1_player2_data,
+                        winnerTeam === 'team1',
+                        'md',
                           team1Change,
-                          false
+                        false
                         )
                       })()}
                     </div>
@@ -392,12 +392,12 @@ export default function MatchHistory() {
                           team2Change = winnerTeam === 'team2' ? base : -base
                         }
                         return renderTeam(
-                          match.team2_player1_data,
-                          match.team2_player2_data,
-                          winnerTeam === 'team2',
-                          'md',
+                        match.team2_player1_data,
+                        match.team2_player2_data,
+                        winnerTeam === 'team2',
+                        'md',
                           team2Change,
-                          false
+                        false
                         )
                       })()}
                     </div>

@@ -202,7 +202,7 @@ export default function PlayerDetail({ playerId, onBack }: PlayerDetailProps) {
               ? match.team1_score > match.team2_score 
               : match.team2_score > match.team1_score
             )
-
+            
             const isDuelMatch = match.game_mode === 'duel'
             const avgRatingChange = Math.abs(match.total_rating_change || 0) / (isDuelMatch ? 2 : 4)
             const estimatedChange = isWinner ? Math.round(avgRatingChange) : -Math.round(avgRatingChange)
@@ -901,7 +901,7 @@ export default function PlayerDetail({ playerId, onBack }: PlayerDetailProps) {
 
             let ratingChange = matchRatingChanges.get(match.id)
             if (ratingChange === undefined) {
-              const avgRatingChange = Math.abs(match.total_rating_change || 0) / (isDuelMatch ? 2 : 4)
+            const avgRatingChange = Math.abs(match.total_rating_change || 0) / (isDuelMatch ? 2 : 4)
               ratingChange = won ? Math.round(avgRatingChange) : -Math.round(avgRatingChange)
             }
             
