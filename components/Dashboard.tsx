@@ -453,10 +453,7 @@ export default function Dashboard() {
                   <h4 className="text-2xl font-bold text-white mb-2">
                     Meest Intense Wedstrijd
                   </h4>
-                  <div className="text-4xl font-bold text-purple-400 mb-2">
-                    {monthlyAwards.game_of_month.value}
-                  </div>
-                  <p className="text-slate-300">totale rating impact</p>
+                
                 </div>
 
                 {/* Match Details */}
