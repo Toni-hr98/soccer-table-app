@@ -110,7 +110,6 @@ export default function PlayerDetail({ playerId, onBack }: PlayerDetailProps) {
         `)
         .or(`team1_player1.eq.${playerId},team1_player2.eq.${playerId},team2_player1.eq.${playerId},team2_player2.eq.${playerId}`)
         .order('created_at', { ascending: false })
-        .limit(15)
 
       if (matchesError) throw matchesError
 
@@ -135,7 +134,7 @@ export default function PlayerDetail({ playerId, onBack }: PlayerDetailProps) {
       const ratingHistory = []
       
       if (matchesData && matchesData.length > 0) {
-        const matchesToUse = matchesData.slice(0, 10).reverse() // Get last 10 matches and reverse to chronological order
+        const matchesToUse = matchesData.slice().reverse() // Use all matches and reverse to chronological order
         
         // Fetch actual rating changes for these matches
         const matchIds = matchesToUse.map(match => match.id)
@@ -628,6 +627,7 @@ export default function PlayerDetail({ playerId, onBack }: PlayerDetailProps) {
                   tick={{ fontSize: 12, fill: '#94a3b8' }}
                 />
                 <YAxis 
+                  domain={[900, 1500]}
                   axisLine={false}
                   tickLine={false}
                   tick={{ fontSize: 12, fill: '#94a3b8' }}

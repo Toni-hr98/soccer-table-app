@@ -9,8 +9,9 @@ import Dashboard from '@/components/Dashboard'
 import Login from '@/components/Login'
 import UserProfile from '@/components/UserProfile'
 import UserManagement from '@/components/UserManagement'
+import MonthlyAwardsAdmin from '@/components/MonthlyAwardsAdmin'
 
-type View = 'main' | 'player-detail' | 'dashboard' | 'profile' | 'user-management'
+type View = 'main' | 'player-detail' | 'dashboard' | 'profile' | 'user-management' | 'monthly-awards-admin'
 
 export default function Home() {
   const { user, isLoading } = useAuth()
@@ -49,16 +50,22 @@ export default function Home() {
       setCurrentView('user-management')
     }
 
+    const handleShowMonthlyAwardsAdmin = () => {
+      setCurrentView('monthly-awards-admin')
+    }
+
     window.addEventListener('showDashboard', handleShowDashboard)
     window.addEventListener('showLeaderboard', handleShowLeaderboard)
     window.addEventListener('showProfile', handleShowProfile)
     window.addEventListener('showUserManagement', handleShowUserManagement)
+    window.addEventListener('showMonthlyAwardsAdmin', handleShowMonthlyAwardsAdmin)
     
     return () => {
       window.removeEventListener('showDashboard', handleShowDashboard)
       window.removeEventListener('showLeaderboard', handleShowLeaderboard)
       window.removeEventListener('showProfile', handleShowProfile)
       window.removeEventListener('showUserManagement', handleShowUserManagement)
+      window.removeEventListener('showMonthlyAwardsAdmin', handleShowMonthlyAwardsAdmin)
     }
   }, [searchParams])
 
@@ -102,6 +109,9 @@ export default function Home() {
     }
     if (currentView === 'user-management') {
       return <UserManagement />
+    }
+    if (currentView === 'monthly-awards-admin') {
+      return <MonthlyAwardsAdmin />
     }
     return <Leaderboard onPlayerClick={handlePlayerClick} />
   }

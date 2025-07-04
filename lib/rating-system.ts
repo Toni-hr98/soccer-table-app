@@ -303,13 +303,7 @@ export function checkAchievements(player: Player, matchResult?: MatchResult | Du
   }
   
   // FIXED: Duel/Classic specific achievements
-  if (matchResult && 'game_mode' in matchResult) {
-    // Track duel and classic wins - this would require additional player stats
-    // For now, we'll check if this is their first win in this mode
-    if (matchResult.game_mode === 'duel' && player.wins === 1) {
-      newAchievements.push('Duelist')
-    }
-  }
+  
   
   // Special match achievements
   if (matchResult?.is_crawl_game) {

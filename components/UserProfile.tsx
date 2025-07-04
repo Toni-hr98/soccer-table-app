@@ -142,7 +142,6 @@ export default function UserProfile() {
         `)
         .or(`team1_player1.eq.${playerId},team1_player2.eq.${playerId},team2_player1.eq.${playerId},team2_player2.eq.${playerId}`)
         .order('created_at', { ascending: false })
-        .limit(15)
 
       if (matchesError) throw matchesError
 
@@ -169,7 +168,7 @@ export default function UserProfile() {
 
       if (matchesData && matchesData.length > 0) {
         // Start from oldest match and work forward
-        const matchesToUse = matchesData.slice(-10).reverse() // Take last 10 matches and reverse to go chronologically
+        const matchesToUse = matchesData.slice().reverse() // Use all matches and reverse to go chronologically
 
         // Fetch actual rating changes for these matches
         const matchIds = matchesToUse.map(match => match.id)
@@ -751,6 +750,7 @@ export default function UserProfile() {
                   tick={{ fontSize: 12, fill: '#94a3b8' }}
                 />
                 <YAxis 
+                  domain={[900, 1500]}
                   axisLine={false}
                   tickLine={false}
                   tick={{ fontSize: 12, fill: '#94a3b8' }}
