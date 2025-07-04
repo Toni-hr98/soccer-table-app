@@ -8,7 +8,7 @@ import { useAuth } from '@/lib/auth-context'
 
 interface MonthlyAwardsData {
   player_of_month?: MonthlyAward & { player: Player }
-  crawler_of_month?: MonthlyAward & { player: Player }
+  crawler_of_month: (MonthlyAward & { player: Player })[]
   most_active?: MonthlyAward & { player: Player }
   game_of_month?: MonthlyAward & { match: Match }
 }
@@ -16,7 +16,7 @@ interface MonthlyAwardsData {
 export default function Dashboard() {
   const { user } = useAuth()
   const [hallOfFameRecords, setHallOfFameRecords] = useState<HallOfFameRecord[]>([])
-  const [monthlyAwards, setMonthlyAwards] = useState<MonthlyAwardsData>({})
+  const [monthlyAwards, setMonthlyAwards] = useState<MonthlyAwardsData>({ crawler_of_month: [] })
   const [loading, setLoading] = useState(true)
   const [showSystemInfo, setShowSystemInfo] = useState(false)
   const [awardsMonthName, setAwardsMonthName] = useState('')
@@ -70,17 +70,20 @@ export default function Dashboard() {
       })
     }
 
-    // Most crawls
-    const mostCrawlsPlayer = players.reduce((prev, current) => 
-      (prev.crawls > current.crawls) ? prev : current
-    )
-    if (mostCrawlsPlayer.crawls > 0) {
+    // Most crawls (handle ties) -> group into one record with winners array
+    const maxCrawls = players.length ? Math.max(...players.map(p => p.crawls)) : 0
+    if (maxCrawls > 0) {
+      const winners = players.filter(p => p.crawls === maxCrawls)
+
+      // Use the first winner as representative for legacy fields, but attach full winners list
       records.push({
         type: 'most_crawls',
-        player: mostCrawlsPlayer,
-        value: mostCrawlsPlayer.crawls,
-        description: `keer gekropen`
-      })
+        player: winners[0],
+        value: maxCrawls,
+        description: `keer gekropen`,
+        // @ts-ignore – extend with extra winners field for UI purposes
+        winners
+      } as HallOfFameRecord & { winners: Player[] })
     }
 
     setHallOfFameRecords(records)
@@ -125,7 +128,7 @@ export default function Dashboard() {
 
     if (error) throw error
 
-    const awardsData: MonthlyAwardsData = {}
+    const awardsData: MonthlyAwardsData = { crawler_of_month: [] }
     
     data?.forEach(award => {
       switch (award.award_type) {
@@ -133,7 +136,7 @@ export default function Dashboard() {
           awardsData.player_of_month = award as MonthlyAward & { player: Player }
           break
         case 'crawler_of_month':
-          awardsData.crawler_of_month = award as MonthlyAward & { player: Player }
+          awardsData.crawler_of_month.push(award as MonthlyAward & { player: Player })
           break
         case 'most_active':
           awardsData.most_active = award as MonthlyAward & { player: Player }
@@ -315,13 +318,28 @@ export default function Dashboard() {
                   {getRecordTitle(record.type)}
                 </h3>
                 
-                {/* Profile Photo */}
-                <div className="mb-3 flex justify-center">
-                  {renderPlayerAvatar(record.player, 'medium')}
-                </div>
-                
-                {/* Player Name */}
-                <p className="text-lg font-semibold text-white mb-3">{record.player.name}</p>
+                {/* Winner Avatars & Names */}
+                {record.type === 'most_crawls' && (record as any).winners ? (
+                  <>
+                    <div className="mb-3 flex justify-center gap-4 flex-wrap">
+                      {(record as any).winners.map((p: Player) => (
+                        <div key={p.id} className="flex flex-col items-center gap-1">
+                          {renderPlayerAvatar(p, 'medium')}
+                          <span className="text-sm text-white font-medium mt-1">{p.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Profile Photo */}
+                    <div className="mb-3 flex justify-center">
+                      {renderPlayerAvatar(record.player, 'medium')}
+                    </div>
+                    {/* Player Name */}
+                    <p className="text-lg font-semibold text-white mb-3">{record.player.name}</p>
+                  </>
+                )}
                 
                 {/* Description */}
                 <p className="text-sm text-slate-400 mb-3">{record.description}</p>
@@ -410,26 +428,24 @@ export default function Dashboard() {
             {/* Crawler of the Month */}
             <div className="card text-center">
               <h3 className="text-lg font-bold text-white mb-4">Crawler of the Month</h3>
-              
-              {monthlyAwards.crawler_of_month ? (
-                <div>
-                  {/* Profile Photo */}
-                  <div className="mb-4 flex justify-center">
-                    {renderPlayerAvatar(monthlyAwards.crawler_of_month.player)}
-                  </div>
-                  
-                  {/* Player Name */}
-                  <h4 className="text-xl font-bold text-white mb-3">
-                    {monthlyAwards.crawler_of_month.player.name}
-                  </h4>
-                  
-                  {/* Value */}
-                  {monthlyAwards.crawler_of_month.value && (
-                    <div className="text-2xl font-bold text-red-400 mb-2">
-                      {monthlyAwards.crawler_of_month.value}
+
+              {(monthlyAwards.crawler_of_month && monthlyAwards.crawler_of_month.length > 0) ? (
+                <div className="flex flex-col items-center gap-6">
+                  {monthlyAwards.crawler_of_month.map((award) => (
+                    <div key={award.player.id} className="flex flex-col items-center">
+                      <div className="mb-2">
+                        {renderPlayerAvatar(award.player)}
+                      </div>
+                      <h4 className="text-lg font-bold text-white mb-1">
+                        {award.player.name}
+                      </h4>
+                      {award.value && (
+                        <div className="text-xl font-bold text-red-400">
+                          {award.value}
+                        </div>
+                      )}
                     </div>
-                  )}
-                  
+                  ))}
                   {/* Description */}
                   <p className="text-sm text-slate-400">crawls deze maand</p>
                 </div>
